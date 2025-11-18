@@ -1,7 +1,7 @@
 # Sean Manning
 
 **Location:** Stockbridge, GA  
-**Phone:** (770) 555-0123  
+**Phone:** (770)555-0123  
 **Email:** <sean.manning@email.com>  
 **LinkedIn:** <https://linkedin.com/in/seanmanning>  
 
@@ -15,7 +15,7 @@ Results-driven IT Systems Administrator with 5+ years of experience managing ent
 
 ## Technical Skills
 
-**Identity & Access Management:** Okta Administration, SAML, SCIM, OIDC, SSO Configuration, Active Directory, Azure AD  
+**Identity & Access Management:** Okta Administration, SAML, SCIM, OIDC, SSO Configuration, Active Directory, AzureAD  
 **SaaS Platforms:** Google Workspace (Advanced), Atlassian Suite, Slack, Zoom, Microsoft 365  
 **Scripting & Automation:** Python, PowerShell, Bash, REST APIs, Workflow Automation  
 **Email Security:** DMARC, DKIM, SPF Configuration, Phishing Prevention, Email Gateway Management  
