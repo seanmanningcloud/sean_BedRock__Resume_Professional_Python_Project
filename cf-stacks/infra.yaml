@@ -1,0 +1,94 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: AI-Generated Resume Website Infrastructure
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Name of the S3 bucket to host resume website
+  DeploymentTrackingTableName:
+    Type: String
+    Default: DeploymentTracking
+    Description: DynamoDB table for deployment metadata
+  ResumeAnalyticsTableName:
+    Type: String
+    Default: ResumeAnalytics
+    Description: DynamoDB table for ATS analysis results
+
+Resources:
+  ResumeSiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      WebsiteConfiguration:
+        IndexDocument: index.html
+
+  ResumeSiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ResumeSiteBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowPublicRead
+            Effect: Allow
+            Principal: "*"
+            Action:
+              - "s3:GetObject"
+            Resource:
+              - !Sub "arn:aws:s3:::${ResumeSiteBucket}/*"
+
+  DeploymentTrackingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref DeploymentTrackingTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: deploymentId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: deploymentId
+          KeyType: HASH
+      Tags:
+        - Key: Project
+          Value: AiResumeSite
+
+  ResumeAnalyticsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref ResumeAnalyticsTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: commitSha
+          AttributeType: S
+        - AttributeName: environment
+          AttributeType: S
+      KeySchema:
+        - AttributeName: commitSha
+          KeyType: HASH
+        - AttributeName: environment
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: AiResumeSite
+
+Outputs:
+  WebsiteBucketName:
+    Description: S3 bucket hosting the resume website
+    Value: !Ref ResumeSiteBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-WebsiteBucketName"
+
+  DeploymentTrackingTableOutput:
+    Description: DynamoDB DeploymentTracking table name
+    Value: !Ref DeploymentTrackingTable
+
+  ResumeAnalyticsTableOutput:
+    Description: DynamoDB ResumeAnalytics table name
+    Value: !Ref ResumeAnalyticsTable
