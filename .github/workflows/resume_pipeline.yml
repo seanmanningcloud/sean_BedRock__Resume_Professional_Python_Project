@@ -1,0 +1,114 @@
+name: AI Resume CI/CD Pipeline
+
+on:
+  pull_request:
+    branches:
+      - "**"
+  push:
+    branches:
+      - master
+
+env:
+  BUCKET_NAME: ai-resume-site-bucket
+  DEPLOYMENT_TABLE_NAME: DeploymentTracking
+  ANALYTICS_TABLE_NAME: ResumeAnalytics
+  AWS_REGION: us-east-1
+  RESUME_PATH: templates/resume_template.md
+  MODEL_ID_HTML: anthropic.claude-3-sonnet-20240229-v1:0
+  MODEL_ID_ANALYTICS: anthropic.claude-3-sonnet-20240229-v1:0
+
+jobs:
+
+  beta_deploy:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Set up AWS CLI credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy CloudFormation (S3 + DynamoDB)
+        run: |
+          aws cloudformation deploy \
+            --stack-name ai-resume-stack \
+            --template-file ./cf-stacks/infra.yaml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides \
+              BucketName=${{ env.BUCKET_NAME }} \
+              DeploymentTrackingTableName=${{ env.DEPLOYMENT_TABLE_NAME }} \
+              ResumeAnalyticsTableName=${{ env.ANALYTICS_TABLE_NAME }}
+
+      - name: Install dependencies
+        run: pip install boto3
+
+      - name: Run resume processing (AI + S3 + DynamoDB)
+        env:
+          ENVIRONMENT: beta
+          COMMIT_SHA: ${{ github.sha }}
+        run: python ./scripts/process_resume.py
+
+      - name: Upload beta website link summary
+        run: echo "Beta deployed at s3://${{ env.BUCKET_NAME }}/beta/index.html"
+
+
+  prod_deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: set up AWS CLI credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy CloudFormation (idempotent)
+        run: |
+          aws cloudformation deploy \
+            --stack-name ai-resume-stack \
+            --template-file ./cf-stacks/infra.yaml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides \
+              BucketName=${{ env.BUCKET_NAME }} \
+              DeploymentTrackingTableName=${{ env.DEPLOYMENT_TABLE_NAME }} \
+              ResumeAnalyticsTableName=${{ env.ANALYTICS_TABLE_NAME }}
+
+      - name: Copy beta → prod
+        run: |
+          aws s3 cp \
+            s3://${{ env.BUCKET_NAME }}/beta/index.html \
+            s3://${{ env.BUCKET_NAME }}/prod/index.html \
+            --content-type "text/html"
+
+      - name: Write prod deployment record
+        run: |
+          aws dynamodb put-item \
+            --table-name ${{ env.DEPLOYMENT_TABLE_NAME }} \
+            --item '{
+              "deploymentId": {"S": "prod-${{ github.sha }}"},
+              "commitSha": {"S": "${{ github.sha }}"},
+              "environment": {"S": "prod"},
+              "status": {"S": "SUCCESS"},
+              "s3Url": {"S": "s3://${{ env.BUCKET_NAME }}/prod/index.html"},
+              "timestamp": {"S": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}
+            }'
+
+      - name: Output production URL
+        run: |
+          echo "Production URL: s3://${{ env.BUCKET_NAME }}/prod/index.html"
